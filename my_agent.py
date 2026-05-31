@@ -1,11 +1,20 @@
-from dotenv import load_dotenv
 import os
 from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
+from langchain_ollama import ChatOllama
+from langchain_core.messages import HumanMessage, SystemMessage
 
-load_dotenv()
+persist_directory = "db/chroma_db"
+embedding_model = OllamaEmbeddings(model="bge-m3:latest")
+chat_model = ChatOllama(model="granite3.1-moe:1b")
+vector_store = Chroma(
+    embedding_function=embedding_model,
+    persist_directory=persist_directory,
+    collection_metadata={"hnsw:space": "cosine"},
+)
+
 
 def load_documents(document, doc_path="docs"):
     print(f"loading document {document}....")
@@ -17,12 +26,9 @@ def load_documents(document, doc_path="docs"):
         path=doc_path,
         glob=f"{document}",
         loader_cls=TextLoader,
-        loader_kwargs={"encoding": "utf-8"},  # used to encode the file data
+        loader_kwargs={"encoding": "utf-8"},
     )
     documents = loader.load()
-
-    # if len(documents) == 0:
-    #     raise FileNotFoundError(f"{doc_path} is Empty....")
 
     for i, doc in enumerate(documents):
         print(f"\nDocumlnet No. {i+1}")
@@ -42,15 +48,6 @@ def split_documents(documents, chunk_size=800, chunk_overlap=0):
 
     chunks = text_splitter.split_documents(documents)
 
-    # for i, chunk in enumerate(chunks[300:305]):
-    #     print(f"\nChunk No. {i+1}")
-    #     print(f"Source : {chunk.metadata['source']}")
-    #     print(f"Content Length : {len(chunk.page_content)} characters")
-    #     print(f"Content Preview : {chunk.page_content[:100]}.....")
-    #     print("_" * 50)
-
-    # print(f".... and {len(chunks) - 5} more.")
-
     return chunks
 
 
@@ -59,42 +56,34 @@ def create_vector_store(chunks, persist_directory="db/chroma_db"):
 
     batch_size = 50
 
-    embedding_model = OllamaEmbeddings(
-        model="bge-m3:latest"
-    )
-
     print("--- Creating vector store ---")
-    vector_store = Chroma.from_documents(
-        documents=chunks[:batch_size],
-        embedding=embedding_model,
-        persist_directory=persist_directory,
-        collection_metadata={"hnsw:space": "cosine"},
-    )
 
-    # 2. Add the remaining chunks in controlled batches
-    for i in range(batch_size, len(chunks), batch_size):
+    for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
         print(f"Storing chunks {i} to {i + len(batch)}...")
         vector_store.add_documents(documents=batch)
-        # time.sleep(2)
 
     print(f"--- Vector store created and saved to {persist_directory} ---")
 
-    return True
+    return vector_store
 
 
-# def main():
-#     print("main function")
+def ask_query(query):
 
-#     # Loading the file
-#     documents = load_documents()
-
-#     # Chunking the file
-#     chunks = split_documents(documents)
-
-#     # Embedding and storing in ChromaDb
-#     create_vector_store(chunks)
-
-
-# if __name__ == "__main__":
-#     main()
+    retriver = vector_store.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={"k": 5, "score_threshold": 0.3},
+    )
+    relevent_docs = retriver.invoke(query)
+    combined_input = f"""based on the following documents, please answer this question : {query}
+    documents : {chr(10).join([f"- {doc.page_content}" for doc in relevent_docs])}
+    please provide a clear, helpful answer using only the information from these documents. if you can't find the answer in documnets, say i don't have enough information to answer that question based on the provided documents.
+    """
+    message = [
+        SystemMessage(content="you are a helpful assistent."),
+        HumanMessage(content=combined_input),
+    ]
+    # result = chat_model.invoke(message)
+    # return result.content
+    for chunk in chat_model.stream(message):
+        print(chunk.content, end="", flush=True)

@@ -1,15 +1,12 @@
-import ingestion
-import retrival
+import my_agent
 
-def ingestion_pipeline(file):
-    documents = ingestion.load_documents(file)
-    chunks = ingestion.split_documents(documents)
-    ingestion.create_vector_store(chunks)
+def ingestion_pipeline(file_name,file_path):
+    documents = my_agent.load_documents(file_name,file_path)
+    chunks = my_agent.split_documents(documents)
+    my_agent.create_vector_store(chunks)
         
 def retrival_pipeline(query):
-    retrival.retrival_pipeline(query)
-
-print("choose \n (1) to add txt file\n (2) to ask query\n (3) to exit\n")
+    my_agent.ask_query(query)
 
 def start():
     print("\n"+"-"*100)
@@ -29,4 +26,6 @@ def start():
     else:
         print("invalid input. try again")
         start()
+
+print("choose \n (1) to add txt file\n (2) to ask query\n (3) to exit\n")
 start()
