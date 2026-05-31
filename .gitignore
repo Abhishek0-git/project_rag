@@ -14,5 +14,5 @@ venv/
 .vscode/
 .idea/
 
-.db/
-.docs/
+db/
+docs/
