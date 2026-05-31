@@ -30,8 +30,8 @@ def retrival_pipeline(query):
         SystemMessage(content="you are a helpful assistent."),
         HumanMessage(content=combined_input),
     ]
-    result = chat_model.invoke(message)
-    # print(f"AI answer : {result.content}")
-    return result.content
-    # for chunk in chat_model.stream(message):
-    #     print(chunk.content, end="", flush=True)
+    # result = chat_model.invoke(message)
+    # return result.content
+    for chunk in chat_model.stream(message):
+        print(chunk.content, end="", flush=True)
+    
