@@ -1,10 +1,12 @@
-import os
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_community.document_loaders import TextLoader, PyMuPDFLoader
+from langchain_classic.retrievers.multi_query import MultiQueryRetriever
+from langchain_classic.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 persist_directory = "db/chroma_db"
 embedding_model = OllamaEmbeddings(model="bge-m3:latest")
@@ -55,13 +57,17 @@ def create_vector_store(chunks, persist_directory="db/chroma_db"):
 
 
 def ask_query(query):
-    retriver = vector_store.as_retriever(
-        search_type="similarity_score_threshold",
-        search_kwargs={"k": 5, "score_threshold": 0.3},
+    query_prompt = PromptTemplate(
+        input_variables=["question"],
+        template="""You are an AI language model assistant. Your task is to generate five different versions of the given user question to retrieve relevant documents from a vector database. By generating multiple perspectives on your user question, your goal is to help the user overcome some of the limitations of distance-based similarity search. Provide these alternative questions separated by newlines.
+
+Original question: {question}""",
     )
-    relevent_docs = retriver.invoke(query)
-    context = chr(10).join([f"- {doc.page_content}" for doc in relevent_docs])
-    combined_input = f"""You are an expert assistant designed to answer questions accurately using ONLY the provided context.
+    retriever = MultiQueryRetriever.from_llm(
+        retriever=vector_store.as_retriever(), llm=chat_model, prompt=query_prompt
+    )
+    prompt = ChatPromptTemplate.from_template(
+        """You are an expert assistant designed to answer questions accurately using ONLY the provided context.
 
 Context:
 ---------------------
@@ -75,13 +81,17 @@ Strict Rules for Your Response:
 2. If the context does not contain the answer to the question, state exactly: "I cannot find the answer in the provided documents." Do not try to make up an answer.
 3. Keep your response concise, factual, and directly relevant to the question.
 
-Question: {query}
-    """
-    message = [
-        SystemMessage(content="you are a helpful assistent."),
-        HumanMessage(content=combined_input),
-    ]
-    # result = chat_model.invoke(message)
+Question: {question}"""
+    )
+
+    chain = (
+        {"context": retriever, "question": RunnablePassthrough()}
+        | prompt
+        | chat_model
+        | StrOutputParser()
+    )
+
+    # result = chain.invoke(query)
     # return result.content
-    for chunk in chat_model.stream(message):
-        print(chunk.content, end="", flush=True)
+    for chunk in chain.stream(query):
+        print(chunk, end="", flush=True)
