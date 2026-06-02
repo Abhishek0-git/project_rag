@@ -1,7 +1,7 @@
 import my_agent
 
-def ingestion_pipeline(file_name,file_path):
-    documents = my_agent.load_documents(file_name,file_path)
+def ingestion_pipeline(file_path):
+    documents = my_agent.load_documents(file_path)
     chunks = my_agent.split_documents(documents)
     my_agent.create_vector_store(chunks)
         
@@ -13,8 +13,7 @@ def start():
     option = input("choise : ")
     if option == "1":
         file_path = input("directory path : ")
-        file_name = input("file name : ")
-        ingestion_pipeline(file_name, file_path)
+        ingestion_pipeline(file_path)
         start()
     elif(option == "2"):
         query = input("ask ai : ")
