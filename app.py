@@ -1,4 +1,4 @@
-from playground import advanced_retrieval
+import advanced_retrieval
 
 def ingestion_pipeline(file_path):
     documents = advanced_retrieval.load_documents(file_path)
